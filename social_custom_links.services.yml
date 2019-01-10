@@ -1,0 +1,9 @@
+services:
+  social_custom_links.route_subscriber:
+    class: Drupal\social_custom_links\Routing\RouteSubscriber
+    tags:
+      - { name: event_subscriber }
+  social_custom_links.redirect_subscriber:
+    class: Drupal\social_custom_links\EventSubscriber\RedirectSubscriber
+    tags:
+      - { name: event_subscriber }

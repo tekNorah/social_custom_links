@@ -1,0 +1,10 @@
+social_custom_links.home:
+  route_name: <front>
+  title: 'Home'
+  base_route: entity.node.canonical
+  weight: -100
+
+social_custom_links.subgroups:
+  route_name: view.domain_groups.page_domain_groups
+  title: 'Groups'
+  base_route: entity.group.canonical

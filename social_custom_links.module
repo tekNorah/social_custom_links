@@ -1,0 +1,209 @@
+<?php
+
+/**
+ * @file
+ * Contains social_custom_links.module.
+ */
+
+use Drupal\Core\Routing\RouteMatchInterface;
+use Drupal\group\Entity\GroupInterface;
+use Drupal\group\Entity\Group;
+use Drupal\user\Entity\User;
+use Drupal\profile\Entity\Profile;
+use Drupal\Core\Url;
+use Drupal\social_group\SocialGroupHelperService;
+use Drupal\group\Entity\GroupContentType;
+
+/**
+ * Implements hook_help().
+ */
+function social_custom_links_help($route_name, RouteMatchInterface $route_match) {
+  switch ($route_name) {
+    // Main module help for the social_custom_links module.
+    case 'help.page.social_custom_links':
+      $output = '';
+      $output .= '<h3>' . t('About') . '</h3>';
+      $output .= '<p>' . t('Open Social Custom Links') . '</p>';
+      return $output;
+
+    default:
+  }
+}
+
+/**
+ * Implements hook_menu_local_tasks_alter().
+ */
+function social_custom_links_menu_local_tasks_alter(&$data, $route_name) {
+  $remove_groups_link = TRUE;
+  $remove_all_links = FALSE;
+  $user = \Drupal::currentUser();
+  //get group entity for current group
+  $current_group = _social_custom_links_get_current_group();
+  // Check if there is a group object on the frontpage route
+  $frontpage_group = _social_custom_links_get_frontpage_group();
+
+  if (!empty($current_group)) {
+    $group_type = $current_group->getGroupType();
+    $group_type_id = $group_type->id();
+    // if user is admin or member of current group
+    if ($user->id() == 1 || $user->hasPermission('manage all groups') || $current_group->getMember($user)) {
+      if ($group_type_id == 'community') {
+        $remove_groups_link = FALSE;
+      }
+    }
+    // if not admin or member & not member of community
+    elseif (!$frontpage_group->getMember($user)) {
+      $remove_all_links = TRUE;
+    }
+  }
+
+  if ($remove_groups_link) {
+    unset($data['tabs'][0]['social_custom_links.subgroups']);
+  }
+  if ($remove_all_links) {
+    unset($data['tabs'][0]);
+  }
+}
+
+/**
+ * Get current Group entity from the route.
+ *
+ * @return \Drupal\group\Entity\GroupInterface
+ *   Returns the group object.
+ */
+function _social_custom_links_get_current_group($node = NULL) {
+  $group = \Drupal::routeMatch()->getParameter('group');
+
+  if (!is_object($group) && !is_null($group)) {
+    $group = \Drupal::entityTypeManager()
+      ->getStorage('group')
+      ->load($group);
+  }
+  else {
+    $node = is_object($node) ? $node : \Drupal::routeMatch()->getParameter('node');
+    if (is_object($node) && !is_null($node)) {
+      $node_entity = [
+        'target_type' => 'node',
+        'target_id' => $node->id(),
+      ];
+      $gid_from_entity = SocialGroupHelperService::getGroupFromEntity($node_entity);
+      if ($gid_from_entity !== NULL) {
+        $group = \Drupal::entityTypeManager()
+          ->getStorage('group')
+          ->load($gid_from_entity);
+      }
+    }
+  }
+
+  return $group;
+}
+
+/**
+ * Get frontpage Group entity from the frontpage route.
+ *
+ * @return \Drupal\group\Entity\GroupInterface
+ *   Returns the group object.
+ */
+function _social_custom_links_get_frontpage_group() {
+  //Get Node Id for Front Page
+  $frontpagepath = \Drupal::config('system.site')->get('page.front');
+  $alias = \Drupal::service('path.alias_manager')->getPathByAlias($frontpagepath);
+  $params = Url::fromUri("internal:" . $alias)->getRouteParameters();
+  $entity_type = key($params);
+
+  // Do nothing if node on front page is not group
+  if ($entity_type == 'group') {
+    $group = \Drupal::entityTypeManager()->getStorage($entity_type)->load($params[$entity_type]);
+  }
+
+  return $group;
+}
+
+/**
+ * Get user entity from the current route.
+ *
+ * @return \Drupal\user\Entity\User
+ *   Returns the user object.
+ */
+function _social_custom_links_get_user_from_current_route() {
+  // Get the current route name for the checks being performed below
+  $user = NULL;
+
+  //Get Node Id for Front Page
+  $current_path = \Drupal::service('path.current')->getPath();
+  $alias = \Drupal::service('path.alias_manager')->getPathByAlias($current_path);
+  $params = Url::fromUri("internal:" . $alias)->getRouteParameters();
+  $entity_type = key($params);
+
+  // If node on current page is user
+  if ($entity_type == 'user') {
+    $user = \Drupal::entityTypeManager()->getStorage($entity_type)->load($params[$entity_type]);
+  }
+
+  // If node on current page is profile
+  if ($entity_type == 'profile') {
+    $profile = \Drupal::entityTypeManager()->getStorage($entity_type)->load($params[$entity_type]);
+    $user = $profile->getOwner();
+  }
+
+  return $user;
+}
+
+/**
+ * Get all group memberships for a certain user.
+ */
+function _social_custom_links_get_all_group_members($uid) {
+  $group_content_types = GroupContentType::loadByEntityTypeId('user');
+  $group_content_types = array_keys($group_content_types);
+
+  $query = \Drupal::database()->select('group_content_field_data', 'gcfd');
+  $query->addField('gcfd', 'gid');
+  $query->condition('gcfd.entity_id', $uid);
+  $query->condition('gcfd.type', $group_content_types, 'IN');
+  $query->execute()->fetchAll();
+
+  $group_ids = $query->execute()->fetchAllAssoc('gid');
+  return array_keys($group_ids);
+}
+
+/**
+ * Implements hook_preprocess_block().
+ */
+function social_custom_links_preprocess_block(&$variables) {
+  /** @var \Drupal\user\Entity\User $account */
+  $account = \Drupal::routeMatch()->getParameter('user');
+  /** @var \Drupal\group\Entity\Group $group */
+  $group = \Drupal::routeMatch()->getParameter('group');
+
+  if (is_numeric($account)) {
+    $account = User::load($account);
+  }
+
+  if (is_numeric($group)) {
+    $group = Group::load($group);
+  }
+
+  if (!empty($variables['elements']['content']['#view'])) {
+    $view = $variables['elements']['content']['#view'];
+
+    if (!empty($view->getDisplay())) {
+      $link = $view->getDisplay();
+
+      if (!empty($link->useMoreText())) {
+        $more_link = $link->useMoreText();
+      }
+    }
+  }
+  // Add variables to sidebar blocks.
+  switch ($variables['elements']['#derivative_plugin_id']) {
+
+    case 'domain_groups-block_domain_groups':
+      $variables['subtitle'] = t('in the group');
+      $variables['view_all_path'] = Url::fromRoute('view.domain_groups.page_domain_groups', [
+        'group' => $group->id(),
+      ]);
+      $variables['button_text'] = $more_link;
+      $link->setOption('use_more', FALSE);
+      break;
+  }
+}

@@ -1,0 +1,7 @@
+name: 'Social Custom Links'
+type: module
+description: 'Open Social Custom Links'
+core: 8.x
+package: 'Custom'
+dependencies:
+  - drupal:group
