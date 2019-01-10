@@ -14,3 +14,6 @@ Features Currently implemented:
  - Prevents subgroups local task from displaying if not member of the Community Group
  - Prevents subgroups local task from displaying on subgroups
  - Disables all local tasks if not admin or member of Community Group
+ - Alter page title for Topics, Events & About Group pages to include Group name
+ - Redirect group pages to assigned domain, if accessed via direct url on incorrect domain
+ - After joined group, redirect to group stream page
